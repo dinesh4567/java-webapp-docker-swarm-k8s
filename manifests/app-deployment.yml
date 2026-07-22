@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: cont-1
-          image: shaikmustafa/k8sfirst:appimage
+          image: dinesh78900/eks:app
           ports:
             - containerPort: 8080
       imagePullSecrets:
