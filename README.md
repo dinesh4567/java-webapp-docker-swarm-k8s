@@ -1,0 +1,119 @@
+# Java Web Application — Docker Swarm and Kubernetes
+
+A Java Spring MVC application (Tomcat + MySQL + RabbitMQ) containerised and
+deployed two ways: as a replicated **Docker Swarm** stack, and as a
+**Kubernetes** workload with a StatefulSet-backed database.
+
+## Attribution
+
+Application source from a DevOps course exercise (the `vprofile` Spring MVC
+sample). **My work here:** the Docker images, the Swarm stack, the Kubernetes
+manifests, and the hardening described under [Fixes applied](#fixes-applied).
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Application | Java, Spring MVC, Tomcat 8 (JRE 11) |
+| Database | MySQL 8.0 |
+| Messaging | RabbitMQ (Spring AMQP) |
+| Build | Maven (`pom.xml` → `vprofile-v2.war`) |
+| Containers | Docker, multi-stage build |
+| Orchestration | Docker Swarm (overlay network) and Kubernetes |
+| Registry | Docker Hub — `dinesh78900/eks` |
+
+## Repository layout
+
+```text
+├── Docker-app/
+│   ├── Dockerfile          # Tomcat image, copies the built WAR
+│   └── multistage/
+│       └── Dockerfile      # Maven build + Tomcat runtime in one file
+├── Docker-db/
+│   ├── Dockerfile          # MySQL 8.0, seeds from db_backup.sql
+│   └── db_backup.sql
+├── manifests/
+│   ├── app-deployment.yml  # Deployment + LoadBalancer Service
+│   ├── db-deployment.yml   # StatefulSet + headless Service + PVC
+│   └── secret.example.yml  # Template; real Secret created at deploy time
+├── compose.yml             # Docker Swarm stack
+├── pom.xml
+└── src/
+```
+
+## Deploy — Docker Swarm
+
+The `compose.yml` uses an **overlay** network and `deploy.replicas`, so it needs
+Swarm mode rather than plain Compose:
+
+```bash
+docker swarm init
+
+export MYSQL_ROOT_PASSWORD='<choose-a-strong-password>'
+docker stack deploy -c compose.yml devops
+
+docker stack services devops
+docker service ps devops_application
+```
+
+The application is published on port `1111`, backed by 3 replicas behind Swarm's
+built-in load balancer. Tear down with `docker stack rm devops`.
+
+## Deploy — Kubernetes
+
+```bash
+# Credentials are never committed - create the Secret first
+kubectl create secret generic devopsdb-secret \
+  --from-literal=MYSQL_ROOT_PASSWORD='<choose-a-strong-password>' \
+  --from-literal=MYSQL_DATABASE=accounts
+
+# Private registry pull secret referenced by both manifests
+kubectl create secret docker-registry flm \
+  --docker-username=dinesh78900 \
+  --docker-password='<docker-hub-token>'
+
+kubectl apply -f manifests/db-deployment.yml
+kubectl apply -f manifests/app-deployment.yml
+
+kubectl get pods,svc,statefulset,pvc
+```
+
+## Fixes applied
+
+The original course manifests deployed, but carried defects worth correcting:
+
+| Issue | Impact | Fix |
+|---|---|---|
+| `ENV MYSQL_ROOT_PASSWORD="devopspassword"` in `Docker-db/Dockerfile` | Credential baked into a published image layer — directly under a `#dont expose passwords here` comment | Supplied at runtime from a Secret or the environment |
+| StatefulSet had **no `serviceName`** | Required field; the manifest is invalid without it | Set to the headless Service `devopsdb` |
+| StatefulSet named `devopsapp` — same as the Deployment | Two different workloads sharing one name; confusing to operate | Renamed to `devopsdb` |
+| Database ran **`replicas: 2` with no volume at all** | Two MySQL pods with independent ephemeral state, diverging on every write, all data lost on restart | Single replica with a `volumeClaimTemplates` PVC at `/var/lib/mysql` |
+| Everything labelled `app: swiggy` | Unrelated leftover on a Java Spring app | Relabelled `app: devopsapp` |
+| `compose.yml` pulled `shaikmustafa/deepika:*` | Another account's images | Repointed to `dinesh78900/eks` |
+| `mysql:5.7.25` (EOL October 2023) | Unpatched base image | Bumped to `mysql:8.0` |
+| Container named `cont-1` | Uninformative | Named for its workload |
+| No probes or resource limits | No health signalling; a pod could soak a node | Liveness/readiness probes and requests/limits on both workloads |
+| `jdbc.password=devopspassword` in `application.properties` | Database password in source control | Resolved from `${MYSQL_ROOT_PASSWORD}` at startup |
+
+## Known limitations
+
+- The Swarm stack publishes MySQL on `3306` to the host — fine for a lab, not for
+  anything exposed.
+- RabbitMQ is wired in `appconfig-rabbitmq.xml` via property placeholders but is
+  not part of either deployment; the app runs without it.
+- No Ingress or TLS — the Kubernetes Service is a plain `LoadBalancer`.
+- No CI/CD in this repo. The Jenkins pipeline work lives in my
+  [AWS EKS project](https://github.com/dinesh4567/AWS-Python-microservices-app).
+- **Not yet re-verified end to end.** The environment-variable resolution in
+  `application.properties` relies on Spring's placeholder configurer searching
+  the system environment. It is the correct approach but I have not rebuilt the
+  WAR and redeployed since making the change — verify with
+  `mvn clean package` and a Swarm deploy before relying on it. The published
+  `dinesh78900/eks:app` image still contains the previous build.
+
+## Next steps
+
+- Add an Ingress with TLS instead of exposing a LoadBalancer directly
+- Externalise MySQL credentials via Sealed Secrets or External Secrets Operator
+- Package the manifests as a Helm chart
+- Add a Jenkins pipeline with Trivy scanning, matching my other projects

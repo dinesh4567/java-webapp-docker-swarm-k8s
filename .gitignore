@@ -1,0 +1,13 @@
+# Never commit a populated Secret or env file
+manifests/secret.yml
+.env
+*.env
+
+# Maven build output
+target/
+*.war
+
+# Local tooling
+.vscode/
+.idea/
+*.log

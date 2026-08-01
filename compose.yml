@@ -1,17 +1,28 @@
+# Docker Swarm stack. Deploy with:
+#   docker stack deploy -c compose.yml devops
+#
+# Credentials come from the environment, never from the image. Create a .env
+# file (gitignored) or export MYSQL_ROOT_PASSWORD before deploying.
+
 version: "3.9"
 
 services:
   devopsdb:
-    image: shaikmustafa/deepika:db
+    image: dinesh78900/eks:db
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD before deploying}
+      MYSQL_DATABASE: accounts
     ports:
       - "3306:3306"
     deploy:
       replicas: 1
+    volumes:
+      - dbdata:/var/lib/mysql
     networks:
       - mynetwork
 
   application:
-    image: shaikmustafa/deepika:app
+    image: dinesh78900/eks:app
     ports:
       - "1111:8080"
     deploy:
@@ -20,6 +31,9 @@ services:
       - devopsdb
     networks:
       - mynetwork
+
+volumes:
+  dbdata:
 
 networks:
   mynetwork:

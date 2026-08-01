@@ -2,9 +2,15 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: devopsapp
+  name: devopsdb
+  labels:
+    app: db
 spec:
-  replicas: 2
+  # Must match the headless Service below. StatefulSet requires this field.
+  serviceName: devopsdb
+  # Single replica: this MySQL image is not configured for replication, so
+  # running more than one would give each pod an independent, diverging database.
+  replicas: 1
   selector:
     matchLabels:
       app: db
@@ -14,21 +20,45 @@ spec:
         app: db
     spec:
       containers:
-        - name: cont-1
+        - name: mysql
           image: dinesh78900/eks:db
           ports:
             - containerPort: 3306
+              name: mysql
+          envFrom:
+            - secretRef:
+                name: devopsdb-secret
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: dbdata
+              mountPath: /var/lib/mysql
       imagePullSecrets:
         - name: flm
 
-
-
+  volumeClaimTemplates:
+    - metadata:
+        name: dbdata
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi
 
 ---
+# Headless Service giving the StatefulSet pod a stable DNS name.
 apiVersion: v1
 kind: Service
 metadata:
   name: devopsdb
+  labels:
+    app: db
 spec:
   clusterIP: None
   selector:

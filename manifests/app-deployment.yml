@@ -3,36 +3,66 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: devopsapp
+  labels:
+    app: devopsapp
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: swiggy
+      app: devopsapp
   template:
     metadata:
       labels:
-        app: swiggy
+        app: devopsapp
     spec:
       containers:
-        - name: cont-1
+        - name: devopsapp
           image: dinesh78900/eks:app
           ports:
             - containerPort: 8080
+
+          # Database credentials injected from the same Secret the
+          # StatefulSet uses, so the two can never drift apart.
+          envFrom:
+            - secretRef:
+                name: devopsdb-secret
+
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
       imagePullSecrets:
         - name: flm
-
-
-
 
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: appsvc
+  labels:
+    app: devopsapp
 spec:
   type: LoadBalancer
   selector:
-    app: swiggy
+    app: devopsapp
   ports:
     - port: 8080
       targetPort: 8080
