@@ -1,8 +1,42 @@
 # Java Web Application — Docker Swarm and Kubernetes
 
+[![Docker Hub](https://img.shields.io/badge/Docker%20Hub-dinesh78900%2Feks-2496ED?style=flat&logo=docker&logoColor=white)](https://hub.docker.com/r/dinesh78900/eks)
+[![Docker Swarm](https://img.shields.io/badge/Docker%20Swarm-2496ED?style=flat&logo=docker&logoColor=white)](https://docs.docker.com/engine/swarm/)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=flat&logo=kubernetes&logoColor=white)](https://kubernetes.io/)
+[![Java](https://img.shields.io/badge/Java-Spring%20MVC-ED8B00?style=flat&logo=openjdk&logoColor=white)](https://spring.io/)
+
 A Java Spring MVC application (Tomcat + MySQL + RabbitMQ) containerised and
 deployed two ways: as a replicated **Docker Swarm** stack, and as a
 **Kubernetes** workload with a StatefulSet-backed database.
+
+## Container images
+
+Both images are published on Docker Hub and referenced by the Swarm stack and
+the Kubernetes manifests:
+
+| Image | Used by | Docker Hub |
+|---|---|---|
+| `dinesh78900/eks:app` | `compose.yml`, `manifests/app-deployment.yml` | [dinesh78900/eks](https://hub.docker.com/r/dinesh78900/eks/tags) |
+| `dinesh78900/eks:db` | `compose.yml`, `manifests/db-deployment.yml` | [dinesh78900/eks](https://hub.docker.com/r/dinesh78900/eks/tags) |
+
+```bash
+docker pull dinesh78900/eks:app
+docker pull dinesh78900/eks:db
+```
+
+To rebuild from source:
+
+```bash
+mvn clean package                                  # produces target/vprofile-v2.war
+docker build -t dinesh78900/eks:app -f Docker-app/Dockerfile .
+docker build -t dinesh78900/eks:db ./Docker-db
+docker push dinesh78900/eks:app && docker push dinesh78900/eks:db
+```
+
+> ⚠️ The published `dinesh78900/eks:app` still contains the **previous** build,
+> with the database password compiled into `application.properties`. The
+> environment-variable change in this repository is not in the image until you
+> rebuild and push. See [Known limitations](#known-limitations).
 
 ## Attribution
 
