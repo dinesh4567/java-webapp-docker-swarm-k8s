@@ -38,6 +38,36 @@ docker push dinesh78900/eks:app && docker push dinesh78900/eks:db
 > environment-variable change in this repository is not in the image until you
 > rebuild and push. See [Known limitations](#known-limitations).
 
+## Verified deployment
+
+Built and deployed on a local `kind` cluster (Kubernetes v1.36.1) from the
+multi-stage Dockerfile in this repository.
+
+![Application running](docs/screenshots/01-application-running.jpg)
+
+| Check | Result |
+|---|---|
+| `devopsapp` Deployment | 2/2 Running |
+| `devopsdb` StatefulSet | 1/1 Running, 0 restarts |
+| `dbdata-devopsdb-0` PVC | Bound, 2Gi |
+| Tomcat + Spring context | Started, WAR deployed, `/login` HTTP 200 |
+| Schema from `db_backup.sql` | `user`, `role`, `user_role` — 7 user rows |
+| Credentials in the deployed WAR | **0 occurrences** of the old password; placeholders only |
+| Secret values against MySQL | Authenticate successfully |
+| App pod → `devopsdb:3306` | Reachable |
+
+Full output in **[docs/VERIFICATION.md](docs/VERIFICATION.md)**.
+
+> **What this does and does not prove.** The deployed
+> `application.properties` contains `${MYSQL_ROOT_PASSWORD:}` rather than a
+> literal password, the Spring context starts without a placeholder-resolution
+> error, no `Access denied` is ever logged, and the injected Secret values
+> authenticate against MySQL from the app pod's own environment.
+> What is *not* demonstrated is Spring opening a pooled connection under load —
+> the connection pool is lazy and this application also expects RabbitMQ
+> (`vpromq01`), memcached and Elasticsearch, none of which these manifests
+> deploy. `/users` returns 500 for that reason, not a database one.
+
 ## Attribution
 
 Application source from a DevOps course exercise (the `vprofile` Spring MVC
@@ -128,6 +158,8 @@ The original course manifests deployed, but carried defects worth correcting:
 | Container named `cont-1` | Uninformative | Named for its workload |
 | No probes or resource limits | No health signalling; a pod could soak a node | Liveness/readiness probes and requests/limits on both workloads |
 | `jdbc.password=devopspassword` in `application.properties` | Database password in source control | Resolved from `${MYSQL_ROOT_PASSWORD}` at startup |
+| The multi-stage Dockerfile ran `git clone` on a **third-party repository** (`imranvisualpath/vprofile-repo`) and built that | The image never contained this repository's source, so every change made here — including moving the credentials out of `application.properties` — was silently excluded from the build | Rewritten to compile from local `pom.xml` and `src/`, with dependency resolution cached in its own layer |
+| MySQL memory limit of `512Mi` | MySQL 8 is OOMKilled during InnoDB initialisation below ~768Mi | Raised to `512Mi` request / `1Gi` limit |
 
 ## Known limitations
 
@@ -138,12 +170,10 @@ The original course manifests deployed, but carried defects worth correcting:
 - No Ingress or TLS — the Kubernetes Service is a plain `LoadBalancer`.
 - No CI/CD in this repo. The Jenkins pipeline work lives in my
   [AWS EKS project](https://github.com/dinesh4567/AWS-Python-microservices-app).
-- **Not yet re-verified end to end.** The environment-variable resolution in
-  `application.properties` relies on Spring's placeholder configurer searching
-  the system environment. It is the correct approach but I have not rebuilt the
-  WAR and redeployed since making the change — verify with
-  `mvn clean package` and a Swarm deploy before relying on it. The published
-  `dinesh78900/eks:app` image still contains the previous build.
+- **The published `dinesh78900/eks:app` on Docker Hub still contains the older
+  build**, with the password compiled in. The image verified above was built
+  locally from this source and loaded into `kind`; push a rebuild before
+  treating the Docker Hub tag as current.
 
 ## Next steps
 

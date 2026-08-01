@@ -31,10 +31,11 @@ spec:
           resources:
             requests:
               cpu: "100m"
-              memory: "256Mi"
+              memory: "512Mi"
             limits:
               cpu: "500m"
-              memory: "512Mi"
+              # MySQL 8 is OOMKilled during InnoDB initialisation below ~768Mi.
+              memory: "1Gi"
           volumeMounts:
             - name: dbdata
               mountPath: /var/lib/mysql
