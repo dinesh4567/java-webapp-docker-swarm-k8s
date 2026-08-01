@@ -33,10 +33,10 @@ docker build -t dinesh78900/eks:db ./Docker-db
 docker push dinesh78900/eks:app && docker push dinesh78900/eks:db
 ```
 
-> ⚠️ The published `dinesh78900/eks:app` still contains the **previous** build,
-> with the database password compiled into `application.properties`. The
-> environment-variable change in this repository is not in the image until you
-> rebuild and push. See [Known limitations](#known-limitations).
+> Both published images are built from the current source by the multi-stage
+> Dockerfile above. `eks:app` contains `${MYSQL_ROOT_PASSWORD}` placeholders,
+> not a compiled-in password, and is the exact image verified on `kind` under
+> [Verified deployment](#verified-deployment).
 
 ## Verified deployment
 
@@ -170,10 +170,9 @@ The original course manifests deployed, but carried defects worth correcting:
 - No Ingress or TLS — the Kubernetes Service is a plain `LoadBalancer`.
 - No CI/CD in this repo. The Jenkins pipeline work lives in my
   [AWS EKS project](https://github.com/dinesh4567/AWS-Python-microservices-app).
-- **The published `dinesh78900/eks:app` on Docker Hub still contains the older
-  build**, with the password compiled in. The image verified above was built
-  locally from this source and loaded into `kind`; push a rebuild before
-  treating the Docker Hub tag as current.
+- The application expects RabbitMQ, memcached and Elasticsearch, none of which
+  these manifests deploy. Pages that depend on them (`/users`) return 500; the
+  database path is unaffected.
 
 ## Next steps
 
